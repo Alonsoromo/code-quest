@@ -1,103 +1,147 @@
-import Image from "next/image";
+"use client";
+
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import type { User } from "@supabase/supabase-js";
+
+interface Challenge {
+  id: string;
+  titulo: string;
+  lenguaje: string;
+  nivel: string;
+}
+
+interface SubmissionRaw {
+  challenge_id: string;
+  resultado: string[];
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
+  const [retos, setRetos] = useState<Challenge[]>([]);
+  const [completados, setCompletados] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const {
+        data: { user: u },
+      } = await supabase.auth.getUser();
+      setUser(u);
+
+      const retosResp = await supabase
+        .from("challenges")
+        .select("id, titulo, lenguaje, nivel")
+        .order("created_at", { ascending: false })
+        .limit(5);
+      const retosData: Challenge[] = retosResp.data ?? [];
+      setRetos(retosData);
+
+      if (u) {
+        const subsResp = await supabase
+          .from("submissions")
+          .select("challenge_id, resultado")
+          .eq("user_id", u.id);
+        const subsData: SubmissionRaw[] = subsResp.data ?? [];
+        const resueltos = new Set(
+          subsData
+            .filter((s) => s.resultado.every((r) => r.includes("✅")))
+            .map((s) => s.challenge_id)
+        );
+        setCompletados(resueltos);
+      } else {
+        setCompletados(new Set());
+      }
+
+      setLoading(false);
+    }
+    load();
+  }, [router]);
+
+  const requireAuth = (path: string) => {
+    if (!user) {
+      router.push("/login?error=Necesitas iniciar sesión para continuar");
+    } else {
+      router.push(path);
+    }
+  };
+
+  return (
+    <main className="py-12 px-6 max-w-4xl mx-auto">
+      <section className="text-center mb-16 bg-gradient-to-r from-green-500 to-blue-600 text-white py-12 rounded-lg shadow-lg">
+        <h1 className="text-5xl font-extrabold mb-4">
+          🎯 Bienvenido a <span className="text-yellow-300">CodeQuest</span>
+        </h1>
+        <p className="text-lg sm:text-xl">
+          Mejora tus habilidades de programación resolviendo retos interactivos.
+        </p>
+        <div className="mt-8 flex flex-col sm:flex-row justify-center gap-4">
+          <button
+            onClick={() => requireAuth("/retos")}
+            className="bg-white text-green-600 font-semibold px-8 py-3 rounded-lg shadow hover:bg-gray-100 transition"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            🚀 Empezar retos
+          </button>
+          {user && (
+            <button
+              onClick={() => router.push("/historial")}
+              className="bg-white text-blue-600 font-semibold px-8 py-3 rounded-lg shadow hover:bg-gray-100 transition"
+            >
+              📚 Mi historial
+            </button>
+          )}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+      </section>
+
+      <section>
+        <h2 className="text-3xl font-semibold mb-6 text-gray-800">
+          🔥 Últimos retos añadidos
+        </h2>
+        {loading ? (
+          <p className="text-center text-gray-500">Cargando retos…</p>
+        ) : user ? (
+          <ul className="grid md:grid-cols-2 gap-6">
+            {retos.map((reto) => (
+              <li
+                key={reto.id}
+                className="relative bg-white border border-gray-200 rounded-lg p-6 shadow hover:shadow-md transition"
+              >
+                <h3 className="text-xl font-semibold mb-2">{reto.titulo}</h3>
+                <p className="text-sm text-gray-500">
+                  {reto.lenguaje} —{" "}
+                  <span className="capitalize">{reto.nivel}</span>
+                </p>
+                <button
+                  onClick={() => requireAuth(`/retos/${reto.id}`)}
+                  className={`mt-4 inline-flex items-center px-4 py-2 rounded-full text-white font-medium transition ${
+                    completados.has(reto.id)
+                      ? "bg-blue-500 hover:bg-blue-600"
+                      : "bg-green-600 hover:bg-green-700"
+                  }`}
+                >
+                  {completados.has(reto.id) ? "👀 Ver solución" : "🚀 Intentar"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="flex flex-col items-center text-gray-500 space-y-4">
+            <span className="text-6xl">🔒</span>
+            <p className="text-lg">
+              Regístrate o inicia sesión para ver los retos.
+            </p>
+            <button
+              onClick={() => router.push("/login")}
+              className="text-green-600 font-semibold hover:underline"
+            >
+              Iniciar sesión
+            </button>
+          </div>
+        )}
+      </section>
+    </main>
   );
 }

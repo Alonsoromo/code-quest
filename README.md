@@ -1,36 +1,114 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CodeQuest
 
-## Getting Started
+Proyecto original, sencillo y escalable para que programadores junior practiquen sus habilidades con retos de código en los lenguajes más populares.
 
-First, run the development server:
+Tabla de contenidos
 
-```bash
+Tecnologías
+
+Instalación
+
+Configuración
+
+Uso
+
+Estructura del proyecto
+
+Características
+
+Contribuir
+
+Licencia
+
+Tecnologías
+
+Next.js (App Router)
+
+TypeScript
+
+Supabase (Auth, Postgres)
+
+PostgreSQL
+
+Tailwind CSS
+
+react-simple-code-editor + Prism.js
+
+Instalación
+
+Clona el repositorio:
+
+git clone <https://github.com/tu-usuario/codequest.git>
+cd codequest
+
+Instala dependencias:
+
+npm install
+o
+pnpm install
+
+Configuración
+
+Crea un archivo .env.local en la raíz con tus credenciales de Supabase:
+
+NEXT_PUBLIC_SUPABASE_URL=<https://mi-proyecto.supabase.co>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_apikey_publica
+
+Configura las tablas y políticas RLS en Supabase:
+
+Tabla challenges con columnas: id, titulo, descripcion, lenguaje, nivel, etiquetas, codigo_base, test_cases.
+
+Tabla submissions con challenge_id, user_id, resultado y políticas de lectura/escritura.
+
+Tabla o vista users_extended con id y email.
+
+Uso
+
+Inicia el servidor de desarrollo:
+
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abre en el navegador [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Estructura del proyecto
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+src/app/
+├─ admin/
+│  ├─ layout.tsx
+│  ├─ page.tsx
+│  ├─ crear/page.tsx
+│  ├─ retos/page.tsx
+│  └─ submissions/page.tsx
+├─ retos/
+│  └─ [id]/page.tsx
+├─ historial/page.tsx
+├─ perfil/page.tsx
+└─ lib/supabase.ts
 
-## Learn More
+Características
 
-To learn more about Next.js, take a look at the following resources:
+Exploración de retos con filtros por título, lenguaje, nivel y etiquetas.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Editor en línea con resaltado de sintaxis y validación inmediata.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Historial de envíos y resultados.
 
-## Deploy on Vercel
+Perfil de usuario con estadísticas y progreso.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Leaderboard global.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Panel de administración para gestionar retos.
+
+Contribuir
+
+Haz un fork del repositorio.
+
+Crea una branch: git checkout -b feature/nombre.
+
+Realiza tus cambios y commits.
+
+Envía un pull request describiendo tu mejora.
+
+Licencia
+
+Este proyecto está bajo la licencia MIT.
