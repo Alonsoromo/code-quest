@@ -2,49 +2,43 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { Submission, Challenge } from "@/types";
 
-interface Challenge {
-  id: string;
-  titulo: string;
-  lenguaje: string;
-}
-
-interface SubmissionRaw {
-  id: string;
-  created_at: string;
-  codigo: string;
-  resultado: string[];
-  challenge: Challenge | Challenge[];
-}
-
-interface Submission {
-  id: string;
-  created_at: string;
-  codigo: string;
-  resultado: string[];
-  challenge: Challenge | null;
+interface SubmissionWithChallengeDetails extends Omit<Submission, "challenge"> {
+  challenge: Pick<Challenge, "id" | "titulo" | "lenguaje"> | null;
 }
 
 export default function PerfilPage() {
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [submissions, setSubmissions] = useState<
+    SubmissionWithChallengeDetails[]
+  >([]);
   const [totalRetos, setTotalRetos] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<number | string>>(new Set());
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
+      setError(null);
       try {
         const {
           data: { user },
+          error: userError,
         } = await supabase.auth.getUser();
-        if (!user) throw new Error("Necesitas iniciar sesión");
 
-        const { data: retos } = await supabase.from("challenges").select("id");
-        setTotalRetos(retos?.length ?? 0);
+        if (userError) throw userError;
+        if (!user)
+          throw new Error("Necesitas iniciar sesión para ver tu perfil.");
 
-        const { data, error } = await supabase
+        const { count: retosCount, error: countError } = await supabase
+          .from("challenges")
+          .select("*", { count: "exact", head: true });
+
+        if (countError) throw countError;
+        setTotalRetos(retosCount ?? 0);
+
+        const { data, error: submissionsError } = await supabase
           .from("submissions")
           .select(
             `
@@ -61,20 +55,25 @@ export default function PerfilPage() {
           )
           .eq("user_id", user.id)
           .order("created_at", { ascending: false });
-        if (error) throw error;
 
-        const raw = (data ?? []) as SubmissionRaw[];
-        const normalized: Submission[] = raw.map((sub) => {
-          const chal = Array.isArray(sub.challenge)
-            ? sub.challenge[0] ?? null
-            : sub.challenge;
-          return { ...sub, challenge: chal };
-        });
-        setSubmissions(normalized);
-      } catch (err) {
-        const msg =
-          err instanceof Error ? err.message : "Error cargando perfil";
-        setError(msg);
+        if (submissionsError) throw submissionsError;
+
+        const fetchedData = (data ?? []).map((item) => ({
+          ...item,
+          challenge: Array.isArray(item.challenge)
+            ? item.challenge[0]
+            : item.challenge,
+        })) as SubmissionWithChallengeDetails[];
+        setSubmissions(fetchedData);
+      } catch (err: unknown) {
+        console.error("Error fetching profile data:", err);
+        let message = "Error cargando perfil. Intenta de nuevo.";
+        if (err instanceof Error) {
+          message = err.message;
+        } else if (typeof err === "string") {
+          message = err;
+        }
+        setError(message);
       } finally {
         setLoading(false);
       }
@@ -83,7 +82,10 @@ export default function PerfilPage() {
   }, []);
 
   const completados = useMemo(
-    () => submissions.filter((s) => s.resultado.every((r) => r.includes("✅"))),
+    () =>
+      submissions.filter(
+        (s) => s.resultado?.every((r: string) => r.includes("✅")) ?? false
+      ),
     [submissions]
   );
 
@@ -101,7 +103,7 @@ export default function PerfilPage() {
     }, {});
   }, [completados]);
 
-  const toggleExpand = (id: string) => {
+  const toggleExpand = (id: number | string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -122,7 +124,6 @@ export default function PerfilPage() {
         📋 Mi Perfil
       </h1>
 
-      {/* Resumen */}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         <div className="p-4 bg-white rounded-lg shadow hover:shadow-md transition text-center">
           <h2 className="text-lg font-semibold text-blue-600">
@@ -134,70 +135,80 @@ export default function PerfilPage() {
         </div>
         <div className="p-4 bg-white rounded-lg shadow hover:shadow-md transition text-center">
           <h2 className="text-lg font-semibold text-green-600">Progreso</h2>
-          <div className="w-full bg-gray-200 rounded-full h-4 mt-2">
+          <div className="w-full bg-gray-200 rounded-full h-4 mt-2 overflow-hidden">
             <div
-              className="bg-green-500 h-4 rounded-full transition-all"
+              className="bg-green-500 h-4 rounded-full transition-all duration-500 ease-out"
               style={{ width: `${porcentaje}%` }}
+              role="progressbar"
+              aria-valuenow={porcentaje}
+              aria-valuemin={0}
+              aria-valuemax={100}
             />
           </div>
           <p className="mt-1 font-semibold">{porcentaje}%</p>
         </div>
         <div className="p-4 bg-white rounded-lg shadow hover:shadow-md transition text-center">
           <h2 className="text-lg font-semibold text-yellow-600">
-            Lenguajes usados
+            Lenguajes usados (Completados)
           </h2>
-          <ul className="mt-2 text-left">
+          <ul className="mt-2 text-left text-sm">
             {Object.entries(statsLenguaje).length > 0 ? (
-              Object.entries(statsLenguaje).map(([lang, count]) => (
-                <li key={lang} className="flex items-center mb-1">
-                  <span className="w-24 font-medium capitalize">{lang}</span>
-                  <div className="flex-1 bg-gray-200 rounded-full h-3 mx-2">
-                    <div
-                      className="bg-blue-500 h-3 rounded-full"
-                      style={{
-                        width: `${(count / completados.length) * 100}%`,
-                      }}
-                    />
-                  </div>
-                  <span className="font-semibold">{count}</span>
-                </li>
-              ))
+              Object.entries(statsLenguaje)
+                .sort(([, countA], [, countB]) => countB - countA)
+                .map(([lang, count]) => (
+                  <li key={lang} className="flex items-center mb-1">
+                    <span className="w-20 font-medium capitalize truncate">
+                      {lang}
+                    </span>
+                    <div className="flex-1 bg-gray-200 rounded-full h-3 mx-2 overflow-hidden">
+                      <div
+                        className="bg-blue-500 h-3 rounded-full"
+                        style={{
+                          width: `${(count / completados.length) * 100}%`,
+                        }}
+                      />
+                    </div>
+                    <span className="font-semibold w-6 text-right">
+                      {count}
+                    </span>
+                  </li>
+                ))
             ) : (
-              <li className="text-gray-600">Aún no completas retos</li>
+              <li className="text-gray-600 italic">Aún no completas retos</li>
             )}
           </ul>
         </div>
       </section>
 
-      {/* Últimos Retos */}
       <section>
         <h2 className="text-2xl font-bold mb-4 text-gray-800">
           📌 Últimos Retos Resueltos
         </h2>
         {ultimos.length === 0 ? (
           <p className="text-gray-600 text-center">
-            Aún no has completado ningún reto.
+            Aún no has completado ningún reto. ¡Anímate!
           </p>
         ) : (
           <ul className="space-y-4">
             {ultimos.map((sub) => {
+              const id = sub.id;
               const date = new Date(sub.created_at).toLocaleString();
-              const isOpen = expanded.has(sub.id);
+              const isOpen = expanded.has(id);
               return (
                 <li
-                  key={sub.id}
+                  key={id}
                   className="bg-white border rounded-lg p-4 shadow hover:shadow-md transition"
                 >
                   <div
                     className="flex justify-between items-center cursor-pointer"
-                    onClick={() => toggleExpand(sub.id)}
+                    onClick={() => toggleExpand(id)}
                   >
                     <div>
                       <p className="font-semibold text-gray-800">
-                        {sub.challenge?.titulo}
+                        {sub.challenge?.titulo ?? "Reto Desconocido"}
                       </p>
                       <p className="text-sm text-gray-500">
-                        {sub.challenge?.lenguaje} — {date}
+                        {sub.challenge?.lenguaje ?? "N/A"} — {date}
                       </p>
                     </div>
                     <span className="text-lg text-gray-600 hover:text-gray-800 transition">
@@ -206,7 +217,7 @@ export default function PerfilPage() {
                   </div>
                   {isOpen && (
                     <pre className="mt-4 bg-gray-100 p-3 rounded overflow-x-auto text-sm">
-                      {sub.codigo}
+                      {sub.codigo ?? ""}
                     </pre>
                   )}
                 </li>

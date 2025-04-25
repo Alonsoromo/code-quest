@@ -3,31 +3,16 @@
 import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { Submission, Challenge } from "@/types";
 
-interface Challenge {
-  id: string;
-  titulo: string;
-  lenguaje: string;
-}
-
-interface SubmissionRaw {
-  id: string;
-  created_at: string;
-  codigo: string;
-  resultado: string[];
-  challenge: Challenge | Challenge[];
-}
-
-interface Submission {
-  id: string;
-  created_at: string;
-  codigo: string;
-  resultado: string[];
-  challenge: Challenge | null;
+interface SubmissionWithChallengeDetails extends Omit<Submission, "challenge"> {
+  challenge: Pick<Challenge, "id" | "titulo" | "lenguaje"> | null;
 }
 
 export default function HistorialPage() {
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [submissions, setSubmissions] = useState<
+    SubmissionWithChallengeDetails[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"todos" | "completados" | "incompletos">(
@@ -38,15 +23,21 @@ export default function HistorialPage() {
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
+      setError(null);
       try {
         const {
           data: { user },
+          error: userError,
         } = await supabase.auth.getUser();
+
+        if (userError) throw userError;
         if (!user) {
-          setError("Necesitas iniciar sesión");
+          setError("Necesitas iniciar sesión para ver tu historial.");
+          setLoading(false);
           return;
         }
-        const { data, error } = await supabase
+
+        const { data, error: submissionsError } = await supabase
           .from("submissions")
           .select(
             `
@@ -63,19 +54,26 @@ export default function HistorialPage() {
           )
           .eq("user_id", user.id)
           .order("created_at", { ascending: false });
-        if (error) throw error;
 
-        const raw = (data ?? []) as SubmissionRaw[];
-        const normalized: Submission[] = raw.map((sub) => {
-          const chal = Array.isArray(sub.challenge)
-            ? sub.challenge[0] ?? null
-            : sub.challenge;
-          return { ...sub, challenge: chal };
-        });
-        setSubmissions(normalized);
-      } catch (err) {
-        console.error(err);
-        setError("Error cargando historial");
+        if (submissionsError) throw submissionsError;
+
+        const fetchedData = (data ?? []).map((item) => ({
+          ...item,
+          challenge: Array.isArray(item.challenge)
+            ? item.challenge[0]
+            : item.challenge,
+        })) as SubmissionWithChallengeDetails[];
+        setSubmissions(fetchedData);
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          console.error("Error fetching history:", err);
+          setError(
+            err.message || "Error cargando historial. Intenta de nuevo."
+          );
+        } else {
+          console.error("Unexpected error:", err);
+          setError("Error inesperado. Intenta de nuevo.");
+        }
       } finally {
         setLoading(false);
       }
@@ -85,15 +83,19 @@ export default function HistorialPage() {
 
   const filtered = useMemo(() => {
     return submissions.filter((sub) => {
-      const done = sub.resultado.every((r) => r.includes("✅"));
+      if (!sub.resultado) {
+        return filter === "incompletos" || filter === "todos";
+      }
+      const done = sub.resultado.every((r: string) => r.includes("✅"));
       if (filter === "completados") return done;
       if (filter === "incompletos") return !done;
       return true;
     });
   }, [submissions, filter]);
 
-  const toggleExpand = (id: string) => {
-    setExpandedId((prev) => (prev === id ? null : id));
+  const toggleExpand = (id: number | string) => {
+    const idStr = String(id);
+    setExpandedId((prev) => (prev === idStr ? null : idStr));
   };
 
   if (loading) return <p className="text-center mt-8">Cargando historial…</p>;
@@ -105,14 +107,11 @@ export default function HistorialPage() {
         📜 Mi Historial de Retos
       </h1>
 
-      {/* Filtros */}
       <div className="flex space-x-2">
-        {["todos", "completados", "incompletos"].map((key) => (
+        {(["todos", "completados", "incompletos"] as const).map((key) => (
           <button
             key={key}
-            onClick={() =>
-              setFilter(key as "todos" | "completados" | "incompletos")
-            }
+            onClick={() => setFilter(key)}
             className={`px-4 py-2 rounded-full transition ${
               filter === key
                 ? "bg-blue-600 text-white"
@@ -128,7 +127,6 @@ export default function HistorialPage() {
         ))}
       </div>
 
-      {/* Lista de Submissions */}
       {filtered.length === 0 ? (
         <p className="text-gray-600">
           No hay registros para el filtro seleccionado.
@@ -136,8 +134,11 @@ export default function HistorialPage() {
       ) : (
         <ul className="space-y-4">
           {filtered.map((sub) => {
-            const done = sub.resultado.every((r) => r.includes("✅"));
+            const isDone =
+              sub.resultado?.every((r: string) => r.includes("✅")) ?? false;
             const date = new Date(sub.created_at).toLocaleString();
+            const isExpanded = expandedId === String(sub.id);
+
             return (
               <li
                 key={sub.id}
@@ -161,25 +162,23 @@ export default function HistorialPage() {
                       {sub.challenge?.lenguaje} — {date}
                     </p>
                   </div>
-                  <span className="text-2xl">
-                    {expandedId === sub.id ? "▲" : "▼"}
-                  </span>
+                  <span className="text-2xl">{isExpanded ? "▲" : "▼"}</span>
                 </div>
 
-                {expandedId === sub.id && (
+                {isExpanded && (
                   <div className="mt-4 space-y-2">
                     <p>
                       Estado:{" "}
                       <span
                         className={`font-semibold ${
-                          done ? "text-green-600" : "text-red-600"
+                          isDone ? "text-green-600" : "text-red-600"
                         }`}
                       >
-                        {done ? "✔ Completado" : "✘ Incompleto"}
+                        {isDone ? "✔ Completado" : "✘ Incompleto"}
                       </span>
                     </p>
                     <pre className="bg-gray-100 p-4 rounded overflow-x-auto text-sm">
-                      {sub.codigo}
+                      {sub.codigo ?? ""}
                     </pre>
                   </div>
                 )}

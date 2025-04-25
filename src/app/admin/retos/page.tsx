@@ -1,18 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, ChangeEvent, FormEvent } from "react";
 import { supabase } from "@/lib/supabase";
-
-interface Challenge {
-  id: string;
-  titulo: string;
-  descripcion: string;
-  lenguaje: string;
-  nivel: string;
-  etiquetas: string[];
-  codigo_base: string;
-  test_cases: { input: unknown[]; output: unknown }[];
-}
+import { Challenge, TestCase } from "@/types"; // Import TestCase if defined
 
 const etiquetasDisponibles = [
   "arrays",
@@ -25,27 +15,44 @@ const etiquetasDisponibles = [
 
 export default function RetosAdminPage() {
   const [retos, setRetos] = useState<Challenge[]>([]);
-  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [editandoId, setEditandoId] = useState<number | null>(null);
   const [form, setForm] = useState<Partial<Challenge>>({});
-  const [testCasesRaw, setTestCasesRaw] = useState("");
+  const [testCasesRaw, setTestCasesRaw] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const cargarRetos = async () => {
-      const { data, error } = await supabase.from("challenges").select("*");
-      if (error) {
-        console.error("Error al cargar retos:", error);
+      setLoading(true);
+      setError(null);
+      const { data, error: fetchError } = await supabase
+        .from("challenges")
+        .select(
+          "id, titulo, descripcion, nivel, lenguaje, etiquetas, codigo_base, test_cases, created_at"
+        )
+        .order("created_at", { ascending: false });
+
+      if (fetchError) {
+        console.error("Error al cargar retos:", fetchError);
+        setError("No se pudieron cargar los retos: " + fetchError.message);
+        setRetos([]);
       } else {
-        setRetos(data || []);
+        setRetos((data as Challenge[]) || []);
       }
+      setLoading(false);
     };
     cargarRetos();
   }, []);
 
-  const eliminarReto = async (id: string) => {
+  const eliminarReto = async (id: number) => {
     if (!confirm("¿Seguro que quieres eliminar este reto?")) return;
-    const { error } = await supabase.from("challenges").delete().eq("id", id);
-    if (error) {
-      console.error("Error al eliminar reto:", error);
+    const { error: deleteError } = await supabase
+      .from("challenges")
+      .delete()
+      .eq("id", id);
+    if (deleteError) {
+      console.error("Error al eliminar reto:", deleteError);
+      alert("Error al eliminar: " + deleteError.message);
     } else {
       setRetos(retos.filter((r) => r.id !== id));
     }
@@ -54,7 +61,7 @@ export default function RetosAdminPage() {
   const empezarEdicion = (reto: Challenge) => {
     setEditandoId(reto.id);
     setForm({ ...reto });
-    setTestCasesRaw(JSON.stringify(reto.test_cases, null, 2));
+    setTestCasesRaw(JSON.stringify(reto.test_cases ?? [], null, 2));
   };
 
   const cancelarEdicion = () => {
@@ -63,177 +70,249 @@ export default function RetosAdminPage() {
     setTestCasesRaw("");
   };
 
+  const handleInputChange = (
+    e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
   const toggleEtiqueta = (etiqueta: string) => {
     setForm((prev) => {
       const etiquetas = prev.etiquetas || [];
-      return {
-        ...prev,
-        etiquetas: etiquetas.includes(etiqueta)
-          ? etiquetas.filter((e) => e !== etiqueta)
-          : [...etiquetas, etiqueta],
-      };
+      const newEtiquetas = etiquetas.includes(etiqueta)
+        ? etiquetas.filter((e) => e !== etiqueta)
+        : [...etiquetas, etiqueta];
+      return { ...prev, etiquetas: newEtiquetas };
     });
   };
 
-  const guardarCambios = async () => {
+  const guardarCambios = async (e: FormEvent) => {
+    e.preventDefault();
     if (!editandoId) return;
+
+    let parsedTestCases: TestCase[] = []; // Use the specific TestCase type
     try {
-      // Parsear y validar test cases
-      const parsed = JSON.parse(testCasesRaw);
-      if (!Array.isArray(parsed))
-        throw new Error("Los test cases deben ser un array");
-
-      // Preparar datos de actualización
-      const updateData = {
-        titulo: form.titulo!,
-        descripcion: form.descripcion!,
-        lenguaje: form.lenguaje!,
-        nivel: form.nivel!,
-        etiquetas: form.etiquetas!,
-        codigo_base: form.codigo_base!,
-        test_cases: parsed,
-      };
-
-      console.log("🔧 updateData:", updateData);
-      const { error } = await supabase
-        .from("challenges")
-        .update(updateData)
-        .eq("id", editandoId);
-
-      if (error) {
-        console.error("Error al guardar reto:", error);
-        alert("❌ Error al guardar reto: " + error.message);
-        return;
+      parsedTestCases = testCasesRaw ? JSON.parse(testCasesRaw) : [];
+      if (!Array.isArray(parsedTestCases)) {
+        throw new Error("Los test cases deben ser un array JSON válido.");
       }
+    } catch (parseError) {
+      console.error("Error parsing test cases:", parseError);
+      alert(
+        "Error en el formato JSON de los test cases: " +
+          (parseError as Error).message
+      );
+      return;
+    }
 
-      // Actualizar estado local y cancelar edición
+    const updateData: Partial<Challenge> = {
+      titulo: form.titulo,
+      descripcion: form.descripcion,
+      lenguaje: form.lenguaje,
+      nivel: form.nivel,
+      etiquetas: form.etiquetas ?? [],
+      codigo_base: form.codigo_base,
+      test_cases: parsedTestCases,
+    };
+
+    Object.keys(updateData).forEach(
+      (key) =>
+        updateData[key as keyof Partial<Challenge>] === undefined &&
+        delete updateData[key as keyof Partial<Challenge>]
+    );
+
+    setLoading(true);
+    setError(null);
+
+    const { data: updatedData, error: updateError } = await supabase
+      .from("challenges")
+      .update(updateData)
+      .eq("id", editandoId)
+      .select()
+      .single();
+
+    setLoading(false);
+
+    if (updateError) {
+      console.error("Error al guardar reto:", updateError);
+      setError("Error al guardar reto: " + updateError.message);
+      alert("❌ Error al guardar reto: " + updateError.message);
+    } else if (updatedData) {
       setRetos(
-        retos.map((r) =>
-          r.id === editandoId ? ({ ...r, ...updateData } as Challenge) : r
-        )
+        retos.map((r) => (r.id === editandoId ? (updatedData as Challenge) : r))
       );
       cancelarEdicion();
-    } catch (e) {
-      console.error("Excepción al guardar reto:", e);
-      alert("❌ Error al guardar reto: " + (e as Error).message);
+      alert("✅ Reto guardado exitosamente!");
+    } else {
+      setError("No se recibió confirmación de la actualización.");
+      alert("⚠️ No se pudo confirmar la actualización.");
     }
   };
 
+  if (loading && retos.length === 0) {
+    return <p className="text-center mt-8">Cargando retos...</p>;
+  }
+
+  if (error && retos.length === 0) {
+    return <p className="text-center mt-8 text-red-600">{error}</p>;
+  }
+
   return (
     <div className="max-w-5xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4">🛠 Editar retos existentes</h1>
+      <h1 className="text-2xl font-bold mb-6">🛠 Editar retos existentes</h1>
+      {error && !loading && <p className="text-red-600 mb-4">Error: {error}</p>}
 
       {retos.map((reto) => (
-        <div key={reto.id} className="border p-4 rounded mb-4 bg-white">
+        <div key={reto.id} className="border p-4 rounded mb-4 bg-white shadow">
           {editandoId === reto.id ? (
-            <>
+            <form onSubmit={guardarCambios} className="space-y-3">
               <input
+                name="titulo"
                 value={form.titulo || ""}
-                onChange={(e) => setForm({ ...form, titulo: e.target.value })}
-                className="w-full p-2 border rounded mb-2"
+                onChange={handleInputChange}
+                className="w-full p-2 border rounded"
                 placeholder="Título"
+                required
               />
               <textarea
+                name="descripcion"
                 value={form.descripcion || ""}
-                onChange={(e) =>
-                  setForm({ ...form, descripcion: e.target.value })
-                }
-                className="w-full p-2 border rounded mb-2"
+                onChange={handleInputChange}
+                className="w-full p-2 border rounded"
                 placeholder="Descripción del reto"
+                rows={4}
+                required
               />
               <select
-                value={form.lenguaje || "javascript"}
-                onChange={(e) => setForm({ ...form, lenguaje: e.target.value })}
-                className="w-full p-2 border rounded mb-2"
+                name="lenguaje"
+                value={form.lenguaje || ""}
+                onChange={handleInputChange}
+                className="w-full p-2 border rounded"
+                required
               >
+                <option value="" disabled>
+                  Selecciona Lenguaje
+                </option>
                 <option value="javascript">JavaScript</option>
                 <option value="python">Python</option>
               </select>
               <select
-                value={form.nivel || "Fácil"}
-                onChange={(e) => setForm({ ...form, nivel: e.target.value })}
-                className="w-full p-2 border rounded mb-2"
+                name="nivel"
+                value={form.nivel || ""}
+                onChange={handleInputChange}
+                className="w-full p-2 border rounded"
+                required
               >
+                <option value="" disabled>
+                  Selecciona Dificultad
+                </option>
                 <option value="Fácil">Fácil</option>
-                <option value="Media">Media</option>
+                <option value="Medio">Medio</option>
                 <option value="Difícil">Difícil</option>
               </select>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {etiquetasDisponibles.map((tag) => (
-                  <button
-                    key={tag}
-                    type="button"
-                    onClick={() => toggleEtiqueta(tag)}
-                    className={`px-3 py-1 text-sm rounded-full border ${
-                      form.etiquetas?.includes(tag)
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-gray-100 text-gray-800"
-                    }`}
-                  >
-                    #{tag}
-                  </button>
-                ))}
+              <div className="border p-2 rounded">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Etiquetas
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {etiquetasDisponibles.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => toggleEtiqueta(tag)}
+                      className={`px-3 py-1 text-sm rounded-full border transition-colors ${
+                        form.etiquetas?.includes(tag)
+                          ? "bg-blue-600 text-white border-blue-700"
+                          : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                      }`}
+                    >
+                      #{tag}
+                    </button>
+                  ))}
+                </div>
               </div>
               <textarea
+                name="codigo_base"
                 value={form.codigo_base || ""}
-                onChange={(e) =>
-                  setForm({ ...form, codigo_base: e.target.value })
-                }
-                className="w-full p-2 border rounded font-mono h-32 mb-2"
-                placeholder="Código base"
+                onChange={handleInputChange}
+                className="w-full p-2 border rounded font-mono h-32"
+                placeholder="Código base (opcional)"
               />
               <textarea
                 value={testCasesRaw}
                 onChange={(e) => setTestCasesRaw(e.target.value)}
-                className="w-full p-2 border rounded font-mono h-32 mb-2"
-                placeholder="Test cases en formato JSON"
+                className="w-full p-2 border rounded font-mono h-40"
+                placeholder="Test cases en formato JSON (array de objetos: [{input: [...], output: ...}, ...])"
+                required
               />
-              <button
-                onClick={guardarCambios}
-                className="bg-blue-600 text-white px-4 py-1 rounded mr-2"
-              >
-                Guardar
-              </button>
-              <button
-                onClick={cancelarEdicion}
-                className="text-red-600 hover:underline"
-              >
-                Cancelar
-              </button>
-            </>
+              <div className="flex gap-3 items-center">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50"
+                >
+                  {loading ? "Guardando..." : "Guardar Cambios"}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelarEdicion}
+                  className="text-red-600 hover:underline"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
           ) : (
             <>
-              <h2 className="text-lg font-semibold">{reto.titulo}</h2>
-              <p className="text-sm text-gray-600">{reto.descripcion}</p>
-              <p className="text-sm text-gray-600">
-                Lenguaje: {reto.lenguaje} | Nivel: {reto.nivel}
+              <h2 className="text-xl font-semibold mb-1">{reto.titulo}</h2>
+              <p className="text-sm text-gray-700 mb-2">{reto.descripcion}</p>
+              <p className="text-sm text-gray-600 mb-2">
+                Lenguaje: <span className="font-medium">{reto.lenguaje}</span> |
+                Dificultad: <span className="font-medium">{reto.nivel}</span>
               </p>
-              <div className="flex flex-wrap gap-2 mt-1">
-                {reto.etiquetas.map((tag) => (
-                  <span
-                    key={tag}
-                    className="text-xs bg-gray-200 text-gray-800 px-2 py-1 rounded-full"
-                  >
-                    #{tag}
-                  </span>
-                ))}
-              </div>
-              <pre className="bg-gray-100 p-2 mt-2 rounded text-sm text-gray-800 overflow-x-auto">
-                {reto.codigo_base}
-              </pre>
-              <pre className="bg-gray-50 p-2 mt-2 rounded text-sm text-gray-800 overflow-x-auto">
-                {JSON.stringify(reto.test_cases, null, 2)}
-              </pre>
-              <div className="mt-2 flex gap-2">
+              {reto.etiquetas && reto.etiquetas.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {reto.etiquetas.map((tag) => (
+                    <span
+                      key={tag}
+                      className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-full"
+                    >
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {reto.codigo_base && (
+                <>
+                  <h3 className="text-xs font-semibold text-gray-600 mt-2">
+                    Código Base:
+                  </h3>
+                  <pre className="bg-gray-100 p-2 mt-1 rounded text-sm text-gray-800 overflow-x-auto font-mono">
+                    {reto.codigo_base}
+                  </pre>
+                </>
+              )}
+              {reto.test_cases && (
+                <>
+                  <h3 className="text-xs font-semibold text-gray-600 mt-2">
+                    Test Cases:
+                  </h3>
+                  <pre className="bg-gray-50 p-2 mt-1 rounded text-sm text-gray-800 overflow-x-auto font-mono">
+                    {JSON.stringify(reto.test_cases ?? [], null, 2)}
+                  </pre>
+                </>
+              )}
+              <div className="mt-3 flex gap-3">
                 <button
                   onClick={() => empezarEdicion(reto)}
-                  className="text-blue-600 hover:underline"
+                  className="text-sm text-blue-600 hover:underline"
                 >
                   Editar
                 </button>
                 <button
                   onClick={() => eliminarReto(reto.id)}
-                  className="text-red-600 hover:underline"
+                  className="text-sm text-red-600 hover:underline"
                 >
                   Eliminar
                 </button>
