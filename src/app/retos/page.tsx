@@ -4,14 +4,21 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import { Challenge, Submission } from "@/types";
-
-type SubmissionStatus = Pick<Submission, "challenge_id" | "resultado">;
+import { Challenge } from "@/types";
+import { useAuthUser } from "@/lib/hooks/useAuthUser";
+import { useUserSubmissions } from "@/lib/hooks/useUserSubmissions";
 
 export default function RetosPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { user, loading: authLoading, error: authError } = useAuthUser();
+  const {
+    submissions: userSubmissions,
+    loading: subsLoading,
+    error: subsError,
+  } = useUserSubmissions();
+
+  const [retosLoading, setRetosLoading] = useState(true);
+  const [retosError, setRetosError] = useState<string | null>(null);
   const [retos, setRetos] = useState<Challenge[]>([]);
   const [completados, setCompletados] = useState<Set<number | string>>(
     new Set()
@@ -24,6 +31,62 @@ export default function RetosPage() {
   const [lenguajes, setLenguajes] = useState<string[]>([]);
   const [etiquetasUnicas, setEtiquetasUnicas] = useState<string[]>([]);
   const [orden, setOrden] = useState<"asc" | "desc">("asc");
+
+  const loading = authLoading || subsLoading || retosLoading;
+  const error = authError || subsError || retosError;
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (!user) {
+      router.push("/login?error=Necesitas iniciar sesión para ver los retos");
+      return;
+    }
+
+    async function fetchChallenges() {
+      setRetosLoading(true);
+      setRetosError(null);
+      try {
+        const { data, error: fetchError } = await supabase
+          .from("challenges")
+          .select("id, titulo, lenguaje, nivel, etiquetas");
+
+        if (fetchError) throw fetchError;
+
+        const retosData = (data as Challenge[]) || [];
+        setRetos(retosData);
+
+        const únicosLeng = Array.from(
+          new Set(retosData.map((ch) => ch.lenguaje).filter(Boolean))
+        );
+        setLenguajes(["Todos", ...únicosLeng.sort()]);
+
+        const tagsSet = new Set<string>();
+        retosData.forEach((ch) =>
+          ch.etiquetas?.forEach((tag) => tagsSet.add(tag))
+        );
+        setEtiquetasUnicas(Array.from(tagsSet).sort());
+      } catch (err: unknown) {
+        console.error("Error cargando retos:", err);
+        let message = "Error cargando retos.";
+        if (err instanceof Error) message = err.message;
+        setRetosError(message);
+      } finally {
+        setRetosLoading(false);
+      }
+    }
+
+    fetchChallenges();
+  }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (subsLoading || !userSubmissions) return;
+
+    const idsCompletados = userSubmissions
+      .filter((sub) => sub.resultado?.every((r: string) => r.includes("✅")))
+      .map((sub) => sub.challenge_id);
+    setCompletados(new Set(idsCompletados));
+  }, [userSubmissions, subsLoading]);
 
   const retosFiltrados = useMemo(() => {
     return retos
@@ -42,79 +105,8 @@ export default function RetosPage() {
       });
   }, [retos, busqueda, lenguajeFiltro, etiquetaActiva, orden]);
 
-  useEffect(() => {
-    async function fetchData() {
-      setLoading(true);
-      setError(null);
-      try {
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
-
-        if (userError) throw userError;
-
-        if (!user) {
-          router.push(
-            "/login?error=Necesitas iniciar sesión para ver los retos"
-          );
-          return;
-        }
-
-        const [retosResp, subsResp] = await Promise.all([
-          supabase
-            .from("challenges")
-            .select("id, titulo, lenguaje, nivel, etiquetas"),
-          supabase
-            .from("submissions")
-            .select("challenge_id, resultado")
-            .eq("user_id", user.id),
-        ]);
-
-        if (retosResp.error) throw retosResp.error;
-        if (subsResp.error) throw subsResp.error;
-
-        const retosData = (retosResp.data as Challenge[]) || [];
-        setRetos(retosData);
-
-        const únicosLeng = Array.from(
-          new Set(retosData.map((ch) => ch.lenguaje).filter(Boolean))
-        );
-        setLenguajes(["Todos", ...únicosLeng.sort()]);
-
-        const tagsSet = new Set<string>();
-        retosData.forEach((ch) =>
-          ch.etiquetas?.forEach((tag) => tagsSet.add(tag))
-        );
-        setEtiquetasUnicas(Array.from(tagsSet).sort());
-
-        const subsData = (subsResp.data as SubmissionStatus[]) || [];
-        const idsCompletados = subsData
-          .filter((sub) =>
-            sub.resultado?.every((r: string) => r.includes("✅"))
-          )
-          .map((sub) => sub.challenge_id);
-
-        setCompletados(new Set(idsCompletados));
-      } catch (err: unknown) {
-        console.error("Error cargando datos de retos:", err);
-        let message = "Error desconocido";
-        if (err instanceof Error) {
-          message = err.message;
-        } else if (typeof err === "string") {
-          message = err;
-        }
-        setError("Error cargando datos: " + message);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchData();
-  }, [router]);
-
   if (loading && retos.length === 0) {
-    return <p className="text-center mt-10">Cargando retos...</p>;
+    return <p className="text-center mt-10">Cargando...</p>;
   }
 
   if (error && retos.length === 0) {
@@ -212,7 +204,7 @@ export default function RetosPage() {
         </div>
       )}
 
-      <ul className="space-y-4">
+      <ul className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {retosFiltrados.length === 0 ? (
           <li key="no-retos" className="text-gray-600 text-center pt-4">
             No hay retos que coincidan con tus filtros.
@@ -221,7 +213,7 @@ export default function RetosPage() {
           retosFiltrados.map((reto) => (
             <li
               key={reto.id}
-              className="flex flex-col sm:flex-row items-start sm:items-center justify-between border p-4 rounded shadow-sm hover:shadow-lg transition bg-white"
+              className="border p-4 rounded shadow hover:shadow-md transition bg-white"
             >
               <div className="flex-1 mb-3 sm:mb-0">
                 <h2 className="text-xl font-semibold text-gray-800">
@@ -252,7 +244,7 @@ export default function RetosPage() {
                     : "bg-green-600 hover:bg-green-700"
                 }`}
               >
-                {completados.has(reto.id) ? "👀 Ver solución" : "🚀 Intentar"}
+                {completados.has(reto.id) ? "👀 Ver Solución" : "🚀 Intentar"}
               </Link>
             </li>
           ))

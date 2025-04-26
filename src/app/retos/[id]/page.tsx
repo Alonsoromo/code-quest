@@ -4,49 +4,70 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import dynamic from "next/dynamic";
-// Importa los tipos centralizados
 import { Challenge, Submission } from "@/types";
+import { useAuthUser } from "@/lib/hooks/useAuthUser";
 
 const Editor = dynamic(() => import("react-simple-code-editor"), {
   ssr: false,
 });
 import { highlight, languages } from "prismjs";
-import "prismjs/components/prism-javascript"; // Asegúrate de importar los lenguajes necesarios
-import "prismjs/components/prism-python"; // Ejemplo si soportas Python
-import "prismjs/themes/prism-okaidia.css"; // Cambia el tema si lo deseas
+import "prismjs/components/prism-javascript";
+import "prismjs/components/prism-python";
+import "prismjs/themes/prism-okaidia.css";
 
-// Define un tipo para los datos de submission que necesitas aquí
 type SubmissionData = Pick<Submission, "codigo" | "resultado">;
 
 export default function RetoPage() {
   const params = useParams();
   const idParam = Array.isArray(params.id) ? params.id[0] : params.id;
+  const { user, loading: authLoading, error: authError } = useAuthUser();
 
   const [reto, setReto] = useState<Challenge | null>(null);
   const [codigo, setCodigo] = useState<string>("");
   const [salida, setSalida] = useState<string[]>([]);
   const [resuelto, setResuelto] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [retoLoading, setRetoLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [ejecutando, setEjecutando] = useState<boolean>(false);
+
+  const loading = authLoading || retoLoading;
+
+  const guardarSubmission = async (resultados: string[]) => {
+    if (user && reto) {
+      const { error: insertError } = await supabase.from("submissions").insert([
+        {
+          user_id: user.id,
+          challenge_id: reto.id,
+          codigo,
+          resultado: resultados,
+        },
+      ]);
+      if (insertError) {
+        console.error("Error saving submission:", insertError);
+        setSalida((prev) => [...prev, "⚠️ Error al guardar el intento."]);
+      }
+    }
+  };
 
   useEffect(() => {
     setReto(null);
     setCodigo("");
     setSalida([]);
     setResuelto(false);
-    setLoading(true);
-    setError(null);
+    setRetoLoading(true);
+    setError(authError);
+
+    if (authLoading) return;
 
     if (!idParam) {
       setError("ID del reto no encontrado.");
-      setLoading(false);
+      setRetoLoading(false);
       return;
     }
 
     const challengeId = idParam;
 
-    async function fetchReto() {
+    async function fetchRetoAndSubmission() {
       try {
         const { data: challengeData, error: challengeError } = await supabase
           .from("challenges")
@@ -59,11 +80,7 @@ export default function RetoPage() {
 
         const fetchedReto = challengeData as Challenge;
         setReto(fetchedReto);
-        setCodigo(fetchedReto.codigo_base ?? "");
-
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        let initialCode = fetchedReto.codigo_base ?? "";
 
         if (user) {
           const { data: submissions, error: submissionsError } = await supabase
@@ -75,46 +92,51 @@ export default function RetoPage() {
             .limit(1);
 
           if (submissionsError) {
-            console.error("Error fetching submissions:", submissionsError);
+            console.error("Error fetching last submission:", submissionsError);
           } else if (submissions && submissions.length > 0) {
             const ultima = submissions[0] as SubmissionData;
             const completo =
               ultima.resultado?.every((r: string) => r.includes("✅")) ?? false;
             if (completo) {
               setResuelto(true);
-              setCodigo(ultima.codigo ?? fetchedReto.codigo_base ?? "");
+              initialCode = ultima.codigo ?? initialCode;
               setSalida(ultima.resultado ?? []);
             }
           }
         }
+        setCodigo(initialCode);
       } catch (err: unknown) {
         console.error("Error fetching challenge data:", err);
-        if (err instanceof Error) {
-          setError(err.message || "Error al cargar el reto.");
-        } else {
-          setError("Ocurrió un error desconocido al cargar el reto.");
-        }
+        let message = "Error al cargar el reto.";
+        if (err instanceof Error) message = err.message;
+        setError(message);
       } finally {
-        setLoading(false);
+        setRetoLoading(false);
       }
     }
 
-    fetchReto();
-  }, [idParam]);
+    fetchRetoAndSubmission();
+  }, [idParam, user, authLoading, authError]);
 
   const ejecutar = async () => {
     if (!reto || resuelto || ejecutando) return;
 
     setEjecutando(true);
     setSalida(["Ejecutando..."]);
-
     const resultados: string[] = [];
+
     try {
       if (!Array.isArray(reto.test_cases)) {
         throw new Error("Formato de test cases inválido.");
       }
 
       const funcion = new Function("return " + codigo)();
+
+      if (typeof funcion !== "function") {
+        throw new Error(
+          "El código proporcionado no define una función válida."
+        );
+      }
 
       reto.test_cases.forEach((testCase, index) => {
         if (
@@ -138,7 +160,7 @@ export default function RetoPage() {
                   )}, recibido ${JSON.stringify(res)}`
             }`
           );
-        } catch (runError) {
+        } catch (runError: unknown) {
           resultados.push(
             `Caso ${index + 1}: ⚠️ Error en ejecución: ${
               (runError as Error).message
@@ -146,37 +168,18 @@ export default function RetoPage() {
           );
         }
       });
-    } catch (e) {
+    } catch (e: unknown) {
       resultados.push(
         `⚠️ Error al preparar o ejecutar el código: ${(e as Error).message}`
       );
     }
 
     setSalida(resultados);
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user && reto) {
-      const { error: insertError } = await supabase.from("submissions").insert([
-        {
-          user_id: user.id,
-          challenge_id: reto.id,
-          codigo,
-          resultado: resultados,
-        },
-      ]);
-      if (insertError) {
-        console.error("Error saving submission:", insertError);
-        setSalida((prev) => [...prev, "⚠️ Error al guardar el intento."]);
-      }
-    }
-
     const completo = resultados.every((r) => r.includes("✅"));
     if (completo) {
       setResuelto(true);
     }
-
+    await guardarSubmission(resultados);
     setEjecutando(false);
   };
 
@@ -185,10 +188,10 @@ export default function RetoPage() {
   const prismLangString = reto?.lenguaje === "python" ? "python" : "javascript";
 
   if (loading) {
-    return <p className="text-center mt-10">Cargando reto...</p>;
+    return <p className="text-center mt-10">Cargando...</p>;
   }
 
-  if (error) {
+  if (error && !reto) {
     return <p className="text-center mt-10 text-red-500">{error}</p>;
   }
 

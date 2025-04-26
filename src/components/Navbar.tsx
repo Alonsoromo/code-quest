@@ -1,32 +1,13 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import type { User } from "@supabase/supabase-js";
-
-// Custom hook para manejar auth y usuario
-function useUser() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user);
-      setLoading(false);
-    });
-    const { data: listener } = supabase.auth.onAuthStateChange((_, session) => {
-      setUser(session?.user ?? null);
-    });
-    return () => listener.subscription.unsubscribe();
-  }, []);
-
-  return { user, loading };
-}
+import { useAuthUser } from "@/lib/hooks/useAuthUser";
 
 export default function Navbar() {
-  const { user, loading } = useUser();
+  const { user, loading } = useAuthUser();
   const router = useRouter();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState<boolean>(false);

@@ -2,41 +2,50 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase"; // Keep supabase for specific query
 import { Submission, Challenge } from "@/types";
+import { useAuthUser } from "@/lib/hooks/useAuthUser"; // Import auth hook
+import { useRouter } from "next/navigation"; // Import router for redirect
 
+// Keep this interface as it defines the specific joined data structure needed
 interface SubmissionWithChallengeDetails extends Omit<Submission, "challenge"> {
   challenge: Pick<Challenge, "id" | "titulo" | "lenguaje"> | null;
 }
 
 export default function HistorialPage() {
+  const { user, loading: authLoading, error: authError } = useAuthUser(); // Use auth hook
+  const router = useRouter(); // Initialize router
+
   const [submissions, setSubmissions] = useState<
     SubmissionWithChallengeDetails[]
   >([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [fetchLoading, setFetchLoading] = useState(true); // Specific loading for this fetch
+  const [fetchError, setFetchError] = useState<string | null>(null); // Specific error for this fetch
   const [filter, setFilter] = useState<"todos" | "completados" | "incompletos">(
     "todos"
   );
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // Combined loading/error
+  const loading = authLoading || fetchLoading;
+  const error = authError || fetchError;
+
   useEffect(() => {
+    if (authLoading) return; // Wait for auth check
+
+    if (!user) {
+      // Redirect if not logged in after auth check
+      router.push(
+        "/login?error=Necesitas iniciar sesión para ver tu historial."
+      );
+      return;
+    }
+
     async function fetchData() {
-      setLoading(true);
-      setError(null);
+      setFetchLoading(true);
+      setFetchError(null);
       try {
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
-
-        if (userError) throw userError;
-        if (!user) {
-          setError("Necesitas iniciar sesión para ver tu historial.");
-          setLoading(false);
-          return;
-        }
-
+        // User is guaranteed here by the check above
         const { data, error: submissionsError } = await supabase
           .from("submissions")
           .select(
@@ -52,34 +61,30 @@ export default function HistorialPage() {
             )
           `
           )
-          .eq("user_id", user.id)
+          .eq("user_id", user!.id) // Use user from hook
           .order("created_at", { ascending: false });
 
         if (submissionsError) throw submissionsError;
 
+        // Process data (handle potential array in challenge)
         const fetchedData = (data ?? []).map((item) => ({
           ...item,
           challenge: Array.isArray(item.challenge)
-            ? item.challenge[0]
+            ? item.challenge[0] // Take the first element if it's an array (shouldn't happen with .single() equivalent in join)
             : item.challenge,
         })) as SubmissionWithChallengeDetails[];
         setSubmissions(fetchedData);
       } catch (err: unknown) {
-        if (err instanceof Error) {
-          console.error("Error fetching history:", err);
-          setError(
-            err.message || "Error cargando historial. Intenta de nuevo."
-          );
-        } else {
-          console.error("Unexpected error:", err);
-          setError("Error inesperado. Intenta de nuevo.");
-        }
+        console.error("Error fetching history:", err);
+        let message = "Error cargando historial. Intenta de nuevo.";
+        if (err instanceof Error) message = err.message;
+        setFetchError(message);
       } finally {
-        setLoading(false);
+        setFetchLoading(false);
       }
     }
     fetchData();
-  }, []);
+  }, [user, authLoading, router]); // Depend on user and auth state
 
   const filtered = useMemo(() => {
     return submissions.filter((sub) => {
@@ -98,7 +103,9 @@ export default function HistorialPage() {
     setExpandedId((prev) => (prev === idStr ? null : idStr));
   };
 
+  // Use combined 'loading' and 'error' states
   if (loading) return <p className="text-center mt-8">Cargando historial…</p>;
+  // Display auth error preferentially if it exists, otherwise fetch error
   if (error) return <p className="text-center mt-8 text-red-600">{error}</p>;
 
   return (

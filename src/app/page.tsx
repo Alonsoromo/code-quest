@@ -2,87 +2,68 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
-import type { User } from "@supabase/supabase-js";
-import { Challenge, Submission } from "@/types";
-
-type SubmissionStatus = Pick<Submission, "challenge_id" | "resultado">;
+import { Challenge } from "@/types";
+import { useAuthUser } from "@/lib/hooks/useAuthUser";
+import { useUserSubmissions } from "@/lib/hooks/useUserSubmissions";
 
 export default function Home() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const { user, loading: authLoading, error: authError } = useAuthUser();
+  const {
+    submissions: userSubmissions,
+    loading: subsLoading,
+    error: subsError,
+  } = useUserSubmissions();
+
   const [retos, setRetos] = useState<Challenge[]>([]);
+  const [retosLoading, setRetosLoading] = useState(true);
+  const [retosError, setRetosError] = useState<string | null>(null);
   const [completados, setCompletados] = useState<Set<number | string>>(
     new Set()
   );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
+  const loading = authLoading || subsLoading || retosLoading;
+  const error = authError || subsError || retosError;
 
   useEffect(() => {
-    async function load() {
-      setLoading(true);
-      setError(null);
+    async function fetchChallenges() {
+      setRetosLoading(true);
+      setRetosError(null);
       try {
-        const {
-          data: { user: u },
-          error: userError,
-        } = await supabase.auth.getUser();
-
-        if (userError) {
-          console.error("Error fetching user:", userError);
-        }
-        setUser(u);
-
-        const retosPromise = supabase
+        const { supabase } = await import("@/lib/supabase");
+        const { data, error: fetchError } = await supabase
           .from("challenges")
           .select("id, titulo, lenguaje, nivel")
           .order("created_at", { ascending: false })
           .limit(5);
 
-        const subsPromise = u
-          ? supabase
-              .from("submissions")
-              .select("challenge_id, resultado")
-              .eq("user_id", u.id)
-          : Promise.resolve({ data: [], error: null });
-
-        const [retosResp, subsResp] = await Promise.all([
-          retosPromise,
-          subsPromise,
-        ]);
-
-        if (retosResp.error) throw retosResp.error;
-        if (subsResp.error) throw subsResp.error;
-
-        const retosData = (retosResp.data as Challenge[]) ?? [];
-        setRetos(retosData);
-
-        if (u && subsResp.data) {
-          const subsData = (subsResp.data as SubmissionStatus[]) ?? [];
-          const resueltos = new Set(
-            subsData
-              .filter((s) =>
-                s.resultado?.every((r: string) => r.includes("✅"))
-              )
-              .map((s) => s.challenge_id)
-          );
-          setCompletados(resueltos);
-        } else {
-          setCompletados(new Set());
-        }
+        if (fetchError) throw fetchError;
+        setRetos((data as Challenge[]) ?? []);
       } catch (err: unknown) {
-        console.error("Error loading home page data:", err);
-        let errorMessage = "Error desconocido";
-        if (err instanceof Error) {
-          errorMessage = err.message;
-        }
-        setError("No se pudieron cargar los datos: " + errorMessage);
+        console.error("Error loading challenges:", err);
+        let message = "Error cargando retos.";
+        if (err instanceof Error) message = err.message;
+        setRetosError(message);
       } finally {
-        setLoading(false);
+        setRetosLoading(false);
       }
     }
-    load();
+    fetchChallenges();
   }, []);
+
+  useEffect(() => {
+    if (authLoading || subsLoading || !user) {
+      setCompletados(new Set());
+      return;
+    }
+
+    const resueltos = new Set(
+      userSubmissions
+        .filter((s) => s.resultado?.every((r: string) => r.includes("✅")))
+        .map((s) => s.challenge_id)
+    );
+    setCompletados(resueltos);
+  }, [user, userSubmissions, authLoading, subsLoading]);
 
   const requireAuth = (path: string) => {
     if (!user) {
@@ -123,10 +104,12 @@ export default function Home() {
         <h2 className="text-3xl font-semibold mb-6 text-gray-800">
           🔥 Últimos retos añadidos
         </h2>
-        {error && <p className="text-center text-red-500 mb-4">{error}</p>}
+        {error && !loading && (
+          <p className="text-center text-red-500 mb-4">{error}</p>
+        )}
 
         {loading ? (
-          <p className="text-center text-gray-500">Cargando retos…</p>
+          <p className="text-center text-gray-500">Cargando…</p>
         ) : user ? (
           retos.length > 0 ? (
             <ul className="grid md:grid-cols-2 gap-6">

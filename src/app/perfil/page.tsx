@@ -1,64 +1,85 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase"; // Keep supabase for specific queries
 import { Submission, Challenge } from "@/types";
+import { useAuthUser } from "@/lib/hooks/useAuthUser"; // Import auth hook
+import { useRouter } from "next/navigation"; // Import router for redirect
 
+// Keep this interface
 interface SubmissionWithChallengeDetails extends Omit<Submission, "challenge"> {
   challenge: Pick<Challenge, "id" | "titulo" | "lenguaje"> | null;
 }
 
 export default function PerfilPage() {
+  const { user, loading: authLoading, error: authError } = useAuthUser(); // Use auth hook
+  const router = useRouter(); // Initialize router
+
   const [submissions, setSubmissions] = useState<
     SubmissionWithChallengeDetails[]
   >([]);
   const [totalRetos, setTotalRetos] = useState<number>(0);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [fetchLoading, setFetchLoading] = useState(true); // Specific loading
+  const [fetchError, setFetchError] = useState<string | null>(null); // Specific error
   const [expanded, setExpanded] = useState<Set<number | string>>(new Set());
 
+  // Combined loading/error
+  const loading = authLoading || fetchLoading;
+  const error = authError || fetchError;
+
   useEffect(() => {
+    if (authLoading) return; // Wait for auth check
+
+    if (!user) {
+      // Redirect if not logged in after auth check
+      router.push("/login?error=Necesitas iniciar sesión para ver tu perfil.");
+      return;
+    }
+
     async function fetchData() {
-      setLoading(true);
-      setError(null);
+      // Ensure user exists before fetching data
+      if (!user) {
+        setFetchError("Usuario no encontrado.");
+        setFetchLoading(false);
+        return;
+      }
+
+      setFetchLoading(true);
+      setFetchError(null);
       try {
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
+        // User is guaranteed here
 
-        if (userError) throw userError;
-        if (!user)
-          throw new Error("Necesitas iniciar sesión para ver tu perfil.");
-
-        const { count: retosCount, error: countError } = await supabase
-          .from("challenges")
-          .select("*", { count: "exact", head: true });
-
-        if (countError) throw countError;
-        setTotalRetos(retosCount ?? 0);
-
-        const { data, error: submissionsError } = await supabase
-          .from("submissions")
-          .select(
-            `
-            id,
-            created_at,
-            codigo,
-            resultado,
-            challenge:challenge_id (
+        // Fetch total challenges count and submissions in parallel
+        const [countResult, submissionsResult] = await Promise.all([
+          supabase
+            .from("challenges")
+            .select("*", { count: "exact", head: true }),
+          supabase
+            .from("submissions")
+            .select(
+              `
               id,
-              titulo,
-              lenguaje
+              created_at,
+              codigo,
+              resultado,
+              challenge:challenge_id (
+                id,
+                titulo,
+                lenguaje
+              )
+            `
             )
-          `
-          )
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false });
+            .eq("user_id", user.id) // Use user from hook
+            .order("created_at", { ascending: false }),
+        ]);
 
-        if (submissionsError) throw submissionsError;
+        // Handle count result
+        if (countResult.error) throw countResult.error;
+        setTotalRetos(countResult.count ?? 0);
 
-        const fetchedData = (data ?? []).map((item) => ({
+        // Handle submissions result
+        if (submissionsResult.error) throw submissionsResult.error;
+        const fetchedData = (submissionsResult.data ?? []).map((item) => ({
           ...item,
           challenge: Array.isArray(item.challenge)
             ? item.challenge[0]
@@ -68,18 +89,14 @@ export default function PerfilPage() {
       } catch (err: unknown) {
         console.error("Error fetching profile data:", err);
         let message = "Error cargando perfil. Intenta de nuevo.";
-        if (err instanceof Error) {
-          message = err.message;
-        } else if (typeof err === "string") {
-          message = err;
-        }
-        setError(message);
+        if (err instanceof Error) message = err.message;
+        setFetchError(message);
       } finally {
-        setLoading(false);
+        setFetchLoading(false);
       }
     }
     fetchData();
-  }, []);
+  }, [user, authLoading, router]); // Depend on user and auth state
 
   const completados = useMemo(
     () =>
