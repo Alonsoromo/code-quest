@@ -31,6 +31,7 @@ export default function RetoPage() {
   const [ejecutando, setEjecutando] = useState<boolean>(false);
 
   const loading = authLoading || retoLoading;
+  const displayError = authError || error;
 
   const guardarSubmission = async (resultados: string[]) => {
     if (user && reto) {
@@ -188,11 +189,11 @@ export default function RetoPage() {
   const prismLangString = reto?.lenguaje === "python" ? "python" : "javascript";
 
   if (loading) {
-    return <p className="text-center mt-10">Cargando...</p>;
+    return <p className="text-center mt-10 text-gray-600">Cargando...</p>;
   }
 
-  if (error && !reto) {
-    return <p className="text-center mt-10 text-red-500">{error}</p>;
+  if (displayError && !reto) {
+    return <p className="text-center mt-10 text-red-600">{displayError}</p>;
   }
 
   if (!reto) {

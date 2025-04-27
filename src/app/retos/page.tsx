@@ -106,11 +106,11 @@ export default function RetosPage() {
   }, [retos, busqueda, lenguajeFiltro, etiquetaActiva, orden]);
 
   if (loading && retos.length === 0) {
-    return <p className="text-center mt-10">Cargando...</p>;
+    return <p className="text-center mt-10 text-gray-600">Cargando...</p>;
   }
 
   if (error && retos.length === 0) {
-    return <p className="text-center mt-10 text-red-500">{error}</p>;
+    return <p className="text-center mt-10 text-red-600">{error}</p>;
   }
 
   return (

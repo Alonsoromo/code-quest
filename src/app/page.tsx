@@ -104,12 +104,11 @@ export default function Home() {
         <h2 className="text-3xl font-semibold mb-6 text-gray-800">
           🔥 Últimos retos añadidos
         </h2>
-        {error && !loading && (
-          <p className="text-center text-red-500 mb-4">{error}</p>
-        )}
 
         {loading ? (
-          <p className="text-center text-gray-500">Cargando…</p>
+          <p className="text-center mt-10 text-gray-600">Cargando...</p>
+        ) : error ? (
+          <p className="text-center mt-10 text-red-600">{error}</p>
         ) : user ? (
           retos.length > 0 ? (
             <ul className="grid md:grid-cols-2 gap-6">

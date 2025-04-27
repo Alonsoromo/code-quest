@@ -104,9 +104,12 @@ export default function HistorialPage() {
   };
 
   // Use combined 'loading' and 'error' states
-  if (loading) return <p className="text-center mt-8">Cargando historial…</p>;
+  if (loading)
+    return (
+      <p className="text-center mt-10 text-gray-600">Cargando historial...</p>
+    );
   // Display auth error preferentially if it exists, otherwise fetch error
-  if (error) return <p className="text-center mt-8 text-red-600">{error}</p>;
+  if (error) return <p className="text-center mt-10 text-red-600">{error}</p>;
 
   return (
     <main className="max-w-3xl mx-auto p-6 space-y-6">

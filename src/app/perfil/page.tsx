@@ -132,8 +132,14 @@ export default function PerfilPage() {
     });
   };
 
-  if (loading) return <p className="text-center mt-8">Cargando perfil…</p>;
-  if (error) return <p className="text-center mt-8 text-red-600">{error}</p>;
+  if (loading) {
+    return (
+      <p className="text-center mt-10 text-gray-600">Cargando perfil...</p>
+    );
+  }
+  if (error) {
+    return <p className="text-center mt-10 text-red-600">{error}</p>;
+  }
 
   return (
     <main className="max-w-4xl mx-auto p-6 space-y-8">

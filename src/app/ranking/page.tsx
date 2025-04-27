@@ -6,45 +6,42 @@ import { LeaderboardItem } from "@/types";
 
 export default function RankingPage() {
   const [ranking, setRanking] = useState<LeaderboardItem[]>([]);
-  const [loading, setLoading] = useState(true); // State for loading indicator
-  const [error, setError] = useState<string | null>(null); // State for error messages
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchRanking() {
       setLoading(true);
       setError(null);
-      setRanking([]); // Clear previous results
+      setRanking([]);
 
-      // Call the database function 'get_ranking'
       const { data, error: rpcError } = await supabase.rpc("get_ranking");
 
       if (rpcError) {
         console.error("Error fetching ranking:", rpcError);
         setError("No se pudo cargar el ranking. Intenta de nuevo más tarde.");
       } else {
-        // The function already calculates and sorts the ranking
         setRanking(data || []);
       }
-      setLoading(false); // Finish loading
+      setLoading(false);
     }
 
     fetchRanking();
-  }, []); // Runs once on component mount
+  }, []);
 
   return (
     <main className="max-w-3xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">🏆 Ranking Global</h1>
 
-      {loading ? ( // Display loading message
-        <p className="text-gray-600 text-center">Cargando ranking...</p>
-      ) : error ? ( // Display error message
-        <p className="text-red-600 text-center">{error}</p>
-      ) : ranking.length === 0 ? ( // Display message if no ranked users
+      {loading ? (
+        <p className="text-center mt-10 text-gray-600">Cargando ranking...</p>
+      ) : error ? (
+        <p className="text-center mt-10 text-red-600">{error}</p>
+      ) : ranking.length === 0 ? (
         <p className="text-gray-600 text-center">
           Aún no hay usuarios con retos completados. ¡Sé el primero!
         </p>
       ) : (
-        // Display the ranked list
         <ol className="space-y-3">
           {ranking.map((user, i) => (
             <li
@@ -57,7 +54,6 @@ export default function RankingPage() {
                 </span>
                 <div>
                   <p className="font-semibold text-gray-800">
-                    {/* Obfuscate email for privacy */}
                     {user.email.replace(/(.{3}).+(@.+)/, "$1***$2")}
                   </p>
                   <p className="text-sm text-gray-500">

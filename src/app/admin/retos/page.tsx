@@ -3,6 +3,8 @@
 import { useEffect, useState, ChangeEvent, FormEvent } from "react";
 import { supabase } from "@/lib/supabase";
 import { Challenge, TestCase } from "@/types"; // Import TestCase if defined
+import { useAuthUser } from "@/lib/hooks/useAuthUser"; // Use the existing hook
+import { useRouter } from "next/navigation";
 
 const etiquetasDisponibles = [
   "arrays",
@@ -14,17 +16,91 @@ const etiquetasDisponibles = [
 ];
 
 export default function RetosAdminPage() {
+  const { user, loading: authLoading, error: authError } = useAuthUser();
+  const router = useRouter();
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [checkingAdmin, setCheckingAdmin] = useState<boolean>(true);
+  const [adminCheckError, setAdminCheckError] = useState<string | null>(null);
+
   const [retos, setRetos] = useState<Challenge[]>([]);
   const [editandoId, setEditandoId] = useState<number | null>(null);
   const [form, setForm] = useState<Partial<Challenge>>({});
   const [testCasesRaw, setTestCasesRaw] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [fetchLoading, setFetchLoading] = useState<boolean>(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<boolean>(false);
+
+  const pageLoading = authLoading || checkingAdmin || fetchLoading;
+  const pageError = authError || adminCheckError || fetchError;
+
+  useEffect(() => {
+    setIsAdmin(false);
+    setCheckingAdmin(true);
+    setAdminCheckError(null);
+    console.log("Admin Check Effect: Running. Auth Loading:", authLoading);
+
+    if (authLoading) return;
+
+    console.log("Admin Check Effect: Auth loaded. User:", user);
+
+    if (!user) {
+      setCheckingAdmin(false);
+      console.log("Admin Check Effect: No user found, redirecting to login.");
+      router.push("/login?error=Acceso denegado.");
+      return;
+    }
+
+    async function checkAdminStatus() {
+      if (!user) {
+        // Add this check
+        console.log("Admin Check Effect: User became null before check.");
+        setCheckingAdmin(false);
+        router.push("/login?error=Acceso denegado.");
+        return;
+      }
+      console.log("Admin Check Effect: Checking profile for user ID:", user.id);
+      try {
+        const { data: profile, error: profileError } = await supabase
+          .from("public_user_profiles")
+          .select("is_admin")
+          .eq("id", user!.id)
+          .single();
+
+        console.log("Admin Check Effect: Profile query result:", {
+          profile,
+          profileError,
+        });
+
+        if (profileError) throw profileError;
+
+        if (profile && profile.is_admin) {
+          console.log("Admin Check Effect: User IS admin.");
+          setIsAdmin(true);
+        } else {
+          console.log(
+            "Admin Check Effect: User is NOT admin or profile not found."
+          );
+          setIsAdmin(false);
+          router.push("/?error=Acceso denegado.");
+        }
+      } catch (err: unknown) {
+        console.error("Admin Check Effect: Error checking admin status:", err);
+        let message = "Error al verificar permisos.";
+        if (err instanceof Error) message = err.message;
+        setAdminCheckError(message);
+        setIsAdmin(false);
+      } finally {
+        console.log("Admin Check Effect: Finished checking admin status.");
+        setCheckingAdmin(false);
+      }
+    }
+    checkAdminStatus();
+  }, [user, authLoading, router]);
 
   useEffect(() => {
     const cargarRetos = async () => {
-      setLoading(true);
-      setError(null);
+      setFetchLoading(true);
+      setFetchError(null);
       const { data, error: fetchError } = await supabase
         .from("challenges")
         .select(
@@ -34,22 +110,24 @@ export default function RetosAdminPage() {
 
       if (fetchError) {
         console.error("Error al cargar retos:", fetchError);
-        setError("No se pudieron cargar los retos: " + fetchError.message);
+        setFetchError("No se pudieron cargar los retos: " + fetchError.message);
         setRetos([]);
       } else {
         setRetos((data as Challenge[]) || []);
       }
-      setLoading(false);
+      setFetchLoading(false);
     };
     cargarRetos();
   }, []);
 
   const eliminarReto = async (id: number) => {
     if (!confirm("¿Seguro que quieres eliminar este reto?")) return;
+    setActionLoading(true);
     const { error: deleteError } = await supabase
       .from("challenges")
       .delete()
       .eq("id", id);
+    setActionLoading(false);
     if (deleteError) {
       console.error("Error al eliminar reto:", deleteError);
       alert("Error al eliminar: " + deleteError.message);
@@ -91,7 +169,7 @@ export default function RetosAdminPage() {
     e.preventDefault();
     if (!editandoId) return;
 
-    let parsedTestCases: TestCase[] = []; // Use the specific TestCase type
+    let parsedTestCases: TestCase[] = [];
     try {
       parsedTestCases = testCasesRaw ? JSON.parse(testCasesRaw) : [];
       if (!Array.isArray(parsedTestCases)) {
@@ -122,8 +200,8 @@ export default function RetosAdminPage() {
         delete updateData[key as keyof Partial<Challenge>]
     );
 
-    setLoading(true);
-    setError(null);
+    setActionLoading(true);
+    setFetchError(null);
 
     const { data: updatedData, error: updateError } = await supabase
       .from("challenges")
@@ -132,11 +210,11 @@ export default function RetosAdminPage() {
       .select()
       .single();
 
-    setLoading(false);
+    setActionLoading(false);
 
     if (updateError) {
       console.error("Error al guardar reto:", updateError);
-      setError("Error al guardar reto: " + updateError.message);
+      setFetchError("Error al guardar reto: " + updateError.message);
       alert("❌ Error al guardar reto: " + updateError.message);
     } else if (updatedData) {
       setRetos(
@@ -145,23 +223,27 @@ export default function RetosAdminPage() {
       cancelarEdicion();
       alert("✅ Reto guardado exitosamente!");
     } else {
-      setError("No se recibió confirmación de la actualización.");
+      setFetchError("No se recibió confirmación de la actualización.");
       alert("⚠️ No se pudo confirmar la actualización.");
     }
   };
 
-  if (loading && retos.length === 0) {
-    return <p className="text-center mt-8">Cargando retos...</p>;
+  if (pageLoading) {
+    return <p className="text-center mt-10 text-gray-600">Cargando...</p>;
   }
-
-  if (error && retos.length === 0) {
-    return <p className="text-center mt-8 text-red-600">{error}</p>;
+  if (pageError) {
+    return <p className="text-center mt-10 text-red-600">{pageError}</p>;
+  }
+  if (!isAdmin && !pageLoading && !pageError) {
+    return <p className="text-center mt-10 text-red-600">Acceso denegado.</p>;
   }
 
   return (
     <div className="max-w-5xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-6">🛠 Editar retos existentes</h1>
-      {error && !loading && <p className="text-red-600 mb-4">Error: {error}</p>}
+      {fetchError && !fetchLoading && (
+        <p className="text-red-600 mb-4">Error: {fetchError}</p>
+      )}
 
       {retos.map((reto) => (
         <div key={reto.id} className="border p-4 rounded mb-4 bg-white shadow">
@@ -249,10 +331,10 @@ export default function RetosAdminPage() {
               <div className="flex gap-3 items-center">
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={actionLoading}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50"
                 >
-                  {loading ? "Guardando..." : "Guardar Cambios"}
+                  {actionLoading ? "Guardando..." : "Guardar Cambios"}
                 </button>
                 <button
                   type="button"
