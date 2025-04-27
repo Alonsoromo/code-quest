@@ -229,7 +229,11 @@ export default function RetosAdminPage() {
   };
 
   if (pageLoading) {
-    return <p className="text-center mt-10 text-gray-600">Cargando...</p>;
+    return (
+      <p className="text-center mt-10 text-gray-600 dark:text-gray-400">
+        Cargando...
+      </p>
+    );
   }
   if (pageError) {
     return <p className="text-center mt-10 text-red-600">{pageError}</p>;
@@ -239,21 +243,24 @@ export default function RetosAdminPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
+    <div className="max-w-5xl mx-auto p-6 dark:text-gray-200">
       <h1 className="text-2xl font-bold mb-6">🛠 Editar retos existentes</h1>
       {fetchError && !fetchLoading && (
         <p className="text-red-600 mb-4">Error: {fetchError}</p>
       )}
 
       {retos.map((reto) => (
-        <div key={reto.id} className="border p-4 rounded mb-4 bg-white shadow">
+        <div
+          key={reto.id}
+          className="border p-4 rounded mb-4 bg-white shadow dark:bg-gray-800 dark:border-gray-700"
+        >
           {editandoId === reto.id ? (
             <form onSubmit={guardarCambios} className="space-y-3">
               <input
                 name="titulo"
                 value={form.titulo || ""}
                 onChange={handleInputChange}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border rounded bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
                 placeholder="Título"
                 required
               />
@@ -261,7 +268,7 @@ export default function RetosAdminPage() {
                 name="descripcion"
                 value={form.descripcion || ""}
                 onChange={handleInputChange}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border rounded bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
                 placeholder="Descripción del reto"
                 rows={4}
                 required
@@ -270,7 +277,7 @@ export default function RetosAdminPage() {
                 name="lenguaje"
                 value={form.lenguaje || ""}
                 onChange={handleInputChange}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border rounded bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
                 required
               >
                 <option value="" disabled>
@@ -283,7 +290,7 @@ export default function RetosAdminPage() {
                 name="nivel"
                 value={form.nivel || ""}
                 onChange={handleInputChange}
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border rounded bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
                 required
               >
                 <option value="" disabled>
@@ -293,8 +300,8 @@ export default function RetosAdminPage() {
                 <option value="Medio">Medio</option>
                 <option value="Difícil">Difícil</option>
               </select>
-              <div className="border p-2 rounded">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+              <div className="border p-2 rounded dark:border-gray-600">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Etiquetas
                 </label>
                 <div className="flex flex-wrap gap-2">
@@ -305,8 +312,8 @@ export default function RetosAdminPage() {
                       onClick={() => toggleEtiqueta(tag)}
                       className={`px-3 py-1 text-sm rounded-full border transition-colors ${
                         form.etiquetas?.includes(tag)
-                          ? "bg-blue-600 text-white border-blue-700"
-                          : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                          ? "bg-blue-600 text-white border-blue-700 dark:bg-blue-500 dark:border-blue-500"
+                          : "bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-600 dark:text-gray-200 dark:border-gray-500 dark:hover:bg-gray-500"
                       }`}
                     >
                       #{tag}
@@ -318,13 +325,13 @@ export default function RetosAdminPage() {
                 name="codigo_base"
                 value={form.codigo_base || ""}
                 onChange={handleInputChange}
-                className="w-full p-2 border rounded font-mono h-32"
+                className="w-full p-2 border rounded font-mono h-32 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
                 placeholder="Código base (opcional)"
               />
               <textarea
                 value={testCasesRaw}
                 onChange={(e) => setTestCasesRaw(e.target.value)}
-                className="w-full p-2 border rounded font-mono h-40"
+                className="w-full p-2 border rounded font-mono h-40 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
                 placeholder="Test cases en formato JSON (array de objetos: [{input: [...], output: ...}, ...])"
                 required
               />
@@ -332,14 +339,14 @@ export default function RetosAdminPage() {
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600 dark:disabled:opacity-60"
                 >
                   {actionLoading ? "Guardando..." : "Guardar Cambios"}
                 </button>
                 <button
                   type="button"
                   onClick={cancelarEdicion}
-                  className="text-red-600 hover:underline"
+                  className="text-red-600 hover:underline dark:text-red-400 dark:hover:text-red-300"
                 >
                   Cancelar
                 </button>
@@ -348,8 +355,10 @@ export default function RetosAdminPage() {
           ) : (
             <>
               <h2 className="text-xl font-semibold mb-1">{reto.titulo}</h2>
-              <p className="text-sm text-gray-700 mb-2">{reto.descripcion}</p>
-              <p className="text-sm text-gray-600 mb-2">
+              <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
+                {reto.descripcion}
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
                 Lenguaje: <span className="font-medium">{reto.lenguaje}</span> |
                 Dificultad: <span className="font-medium">{reto.nivel}</span>
               </p>
@@ -358,7 +367,7 @@ export default function RetosAdminPage() {
                   {reto.etiquetas.map((tag) => (
                     <span
                       key={tag}
-                      className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-full"
+                      className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-full dark:bg-gray-600 dark:text-gray-200"
                     >
                       #{tag}
                     </span>
@@ -367,20 +376,20 @@ export default function RetosAdminPage() {
               )}
               {reto.codigo_base && (
                 <>
-                  <h3 className="text-xs font-semibold text-gray-600 mt-2">
+                  <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400 mt-2">
                     Código Base:
                   </h3>
-                  <pre className="bg-gray-100 p-2 mt-1 rounded text-sm text-gray-800 overflow-x-auto font-mono">
+                  <pre className="bg-gray-100 p-2 mt-1 rounded text-sm text-gray-800 overflow-x-auto font-mono dark:bg-gray-900 dark:text-gray-300">
                     {reto.codigo_base}
                   </pre>
                 </>
               )}
               {reto.test_cases && (
                 <>
-                  <h3 className="text-xs font-semibold text-gray-600 mt-2">
+                  <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400 mt-2">
                     Test Cases:
                   </h3>
-                  <pre className="bg-gray-50 p-2 mt-1 rounded text-sm text-gray-800 overflow-x-auto font-mono">
+                  <pre className="bg-gray-50 p-2 mt-1 rounded text-sm text-gray-800 overflow-x-auto font-mono dark:bg-gray-900 dark:text-gray-300">
                     {JSON.stringify(reto.test_cases ?? [], null, 2)}
                   </pre>
                 </>
@@ -388,13 +397,13 @@ export default function RetosAdminPage() {
               <div className="mt-3 flex gap-3">
                 <button
                   onClick={() => empezarEdicion(reto)}
-                  className="text-sm text-blue-600 hover:underline"
+                  className="text-sm text-blue-600 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
                 >
                   Editar
                 </button>
                 <button
                   onClick={() => eliminarReto(reto.id)}
-                  className="text-sm text-red-600 hover:underline"
+                  className="text-sm text-red-600 hover:underline dark:text-red-400 dark:hover:text-red-300"
                 >
                   Eliminar
                 </button>

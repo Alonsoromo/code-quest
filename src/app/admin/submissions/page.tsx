@@ -160,7 +160,11 @@ export default function SubmissionsAdminPage() {
   }, [submissions, busquedaEmail, busquedaReto, filtroEstado]);
 
   if (pageLoading && submissions.length === 0) {
-    return <p className="text-center mt-10 text-gray-600">Cargando...</p>;
+    return (
+      <p className="text-center mt-10 text-gray-600 dark:text-gray-400">
+        Cargando...
+      </p>
+    );
   }
   if (pageError && submissions.length === 0) {
     return <p className="text-center mt-10 text-red-600">{pageError}</p>;
@@ -170,7 +174,7 @@ export default function SubmissionsAdminPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
+    <div className="max-w-5xl mx-auto p-6 dark:text-gray-200">
       <h1 className="text-2xl font-bold mb-6">📊 Submissions de usuarios</h1>
 
       <div className="grid sm:grid-cols-3 gap-4 mb-6">
@@ -179,14 +183,14 @@ export default function SubmissionsAdminPage() {
           placeholder="Buscar por email"
           value={busquedaEmail}
           onChange={(e) => setBusquedaEmail(e.target.value)}
-          className="border p-2 rounded w-full"
+          className="border p-2 rounded w-full bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
         />
         <input
           type="text"
           placeholder="Buscar por reto"
           value={busquedaReto}
           onChange={(e) => setBusquedaReto(e.target.value)}
-          className="border p-2 rounded w-full"
+          className="border p-2 rounded w-full bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
         />
         <select
           value={filtroEstado}
@@ -195,7 +199,7 @@ export default function SubmissionsAdminPage() {
               e.target.value as "todos" | "completados" | "incompletos"
             )
           }
-          className="border p-2 rounded w-full"
+          className="border p-2 rounded w-full bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
         >
           <option value="todos">Todos</option>
           <option value="completados">Completados</option>
@@ -208,10 +212,12 @@ export default function SubmissionsAdminPage() {
       )}
 
       {fetchLoading && submissions.length > 0 && (
-        <p className="text-center text-gray-500 mb-4">Actualizando...</p>
+        <p className="text-center text-gray-500 dark:text-gray-400 mb-4">
+          Actualizando...
+        </p>
       )}
       {filtrados.length === 0 && !fetchLoading ? (
-        <p className="text-gray-600 text-center">
+        <p className="text-gray-600 dark:text-gray-400 text-center">
           No hay submissions que coincidan con tu búsqueda.
         </p>
       ) : (
@@ -222,9 +228,9 @@ export default function SubmissionsAdminPage() {
             return (
               <li
                 key={sub.id}
-                className="border p-4 rounded bg-white shadow-sm hover:shadow-md transition"
+                className="border p-4 rounded bg-white shadow-sm hover:shadow-md transition dark:bg-gray-800 dark:border-gray-700 dark:hover:shadow-lg dark:hover:shadow-blue-900/20"
               >
-                <div className="text-sm text-gray-700 space-y-1">
+                <div className="text-sm text-gray-700 dark:text-gray-300 space-y-1">
                   <p>
                     <strong>Fecha:</strong>{" "}
                     {new Date(sub.created_at).toLocaleString()}
@@ -232,13 +238,15 @@ export default function SubmissionsAdminPage() {
                   <p>
                     <strong>Usuario:</strong>{" "}
                     {sub.user?.email ?? (
-                      <span className="text-gray-500 italic">Desconocido</span>
+                      <span className="text-gray-500 dark:text-gray-400 italic">
+                        Desconocido
+                      </span>
                     )}
                   </p>
                   <p>
                     <strong>Reto:</strong>{" "}
                     {sub.challenge?.titulo ?? (
-                      <span className="text-gray-500 italic">
+                      <span className="text-gray-500 dark:text-gray-400 italic">
                         Eliminado/No encontrado
                       </span>
                     )}
@@ -246,7 +254,7 @@ export default function SubmissionsAdminPage() {
                   <p>
                     <strong>Resultado:</strong>{" "}
                     {isDone ? (
-                      <span className="text-green-600 font-semibold">
+                      <span className="text-green-600 dark:text-green-400 font-semibold">
                         ✔ Completado
                       </span>
                     ) : (
@@ -256,7 +264,7 @@ export default function SubmissionsAdminPage() {
                     )}
                   </p>
                 </div>
-                <pre className="mt-3 bg-gray-100 p-3 rounded text-sm overflow-x-auto font-mono">
+                <pre className="mt-3 bg-gray-100 dark:bg-gray-900 dark:text-gray-300 p-3 rounded text-sm overflow-x-auto font-mono">
                   {sub.codigo ?? ""}
                 </pre>
               </li>

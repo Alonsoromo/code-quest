@@ -188,7 +188,9 @@ export default function CrearRetoPage() {
 
   if (pageLoading) {
     return (
-      <p className="text-center mt-10 text-gray-600">Verificando permisos...</p>
+      <p className="text-center mt-10 text-gray-600 dark:text-gray-400">
+        Verificando permisos...
+      </p>
     );
   }
   if (pageError) {
@@ -199,7 +201,7 @@ export default function CrearRetoPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto p-6">
+    <div className="max-w-3xl mx-auto p-6 dark:text-gray-200">
       <h1 className="text-2xl font-bold mb-6">Crear Nuevo Reto</h1>
       <form onSubmit={guardarReto} className="space-y-4">
         <div>
@@ -212,7 +214,7 @@ export default function CrearRetoPage() {
             type="text"
             value={form.titulo || ""}
             onChange={handleInputChange}
-            className="w-full border p-2 rounded"
+            className="w-full border p-2 rounded bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
             required
           />
         </div>
@@ -226,7 +228,7 @@ export default function CrearRetoPage() {
             name="descripcion"
             value={form.descripcion || ""}
             onChange={handleInputChange}
-            className="w-full border p-2 rounded h-24"
+            className="w-full border p-2 rounded h-24 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
             required
           />
         </div>
@@ -240,7 +242,7 @@ export default function CrearRetoPage() {
             name="lenguaje"
             value={form.lenguaje || "javascript"}
             onChange={handleInputChange}
-            className="w-full border p-2 rounded"
+            className="w-full border p-2 rounded bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
             required
           >
             <option value="javascript">JavaScript</option>
@@ -257,7 +259,7 @@ export default function CrearRetoPage() {
             name="dificultad"
             value={form.nivel || "Fácil"}
             onChange={handleInputChange}
-            className="w-full border p-2 rounded"
+            className="w-full border p-2 rounded bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
             required
           >
             <option value="Fácil">Fácil</option>
@@ -276,8 +278,8 @@ export default function CrearRetoPage() {
                 onClick={() => toggleEtiqueta(tag)}
                 className={`px-3 py-1 rounded-full text-sm border transition-colors ${
                   form.etiquetas?.includes(tag)
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                    ? "bg-blue-600 text-white border-blue-600 dark:bg-blue-500 dark:border-blue-500"
+                    : "bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-600 dark:text-gray-200 dark:border-gray-500 dark:hover:bg-gray-500"
                 }`}
               >
                 #{tag}
@@ -295,7 +297,7 @@ export default function CrearRetoPage() {
             name="codigo_base"
             value={form.codigo_base || ""}
             onChange={handleInputChange}
-            className="w-full border p-2 rounded h-40 font-mono"
+            className="w-full border p-2 rounded h-40 font-mono bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
           />
         </div>
 
@@ -311,7 +313,7 @@ export default function CrearRetoPage() {
   { "input": [2, 3], "output": 5 },
   { "input": [-1, 1], "output": 0 }
 ]`}
-            className="w-full border p-2 rounded h-40 font-mono"
+            className="w-full border p-2 rounded h-40 font-mono bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
             required
           />
         </div>
@@ -320,14 +322,16 @@ export default function CrearRetoPage() {
           <button
             type="submit"
             disabled={actionLoading}
-            className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-green-500 dark:hover:bg-green-600 dark:disabled:opacity-60"
           >
             {actionLoading ? "Guardando..." : "Guardar Reto"}
           </button>
           {mensaje && (
             <p
               className={`font-semibold ${
-                mensaje.startsWith("✅") ? "text-green-600" : "text-red-600"
+                mensaje.startsWith("✅")
+                  ? "text-green-600 dark:text-green-400"
+                  : "text-red-600"
               }`}
             >
               {mensaje}
